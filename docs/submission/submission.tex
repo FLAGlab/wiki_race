@@ -1,0 +1,137 @@
+\documentclass{article}
+
+\input{./preamble_homeworks}
+
+\usepackage{titlesec}
+
+% Tighter, ruled section headings instead of the default oversized skips.
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{0.6em}{}[{\vspace{-0.6ex}\titlerule[0.5pt]}]
+\titlespacing{\section}{0pt}{1.6em}{0.7em}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{0.6em}{}
+\titlespacing{\subsection}{0pt}{1.1em}{0.4em}
+
+% Shell commands, without line numbers.
+\lstdefinestyle{shell}{numbers=none, columns=fullflexible, basicstyle=\small\ttfamily,
+  aboveskip=0.5\baselineskip, belowskip=0.5\baselineskip, xleftmargin=1.5em}
+
+\begin{document}
+
+\begin{center}
+    {\LARGE \textbf{WikiRace}}\\[0.15cm]
+    {\large Remember this is a competition, do your best!}\\[0.35cm]
+    \rule{0.35\linewidth}{0.4pt}
+\end{center}
+
+\bigskip
+
+\section{What you submit}
+
+You submit a public GitHub repository that holds only your player project, the folder
+\scode{player/} of the WikiRace repository. The root of your repository is the content of
+that folder, with all its files and the same structure. The rest of the WikiRace
+repository (\scode{platform/}, \scode{deploy/}, \scode{docs/}) is not part of your
+submission.
+
+\begin{lstlisting}[style=shell]
+.formatter.exs
+.gitignore
+Dockerfile
+README.md
+bin/connect.exs
+lib/player/application.ex
+lib/player/crawler.ex
+lib/wiki_race/crawler.ex
+lib/wiki_race/harness.ex
+lib/wiki_race/status.ex
+mix.exs
+mix.lock
+test/test_helper.exs
+test/wiki_race/contract_test.exs
+\end{lstlisting}
+
+You may add files and folders under \scode{lib/} and \scode{test/}. The platform clones
+your repository at a tag, builds a release from its root, and copies it to both player
+virtual machines. Before each match, the platform starts your crawler on one of them, in a
+new Erlang node.
+
+The platform clones a PUBLIC repository. A private repository cannot be cloned, so your
+submission cannot be raced.
+
+\section{Steps}
+
+\begin{enumerate}
+    \item Choose a name for your group. The dashboard and the standings show it during the
+    tournament. Mention it: in the README or in the BN submission, you choose where, I just 
+    need to know what the name of your group is.
+
+    \item Create a public GitHub repository.
+
+    \item\label{step:push} Turn your \scode{player/} folder into a repository of its own
+    and push it. The folder \scode{my-crawler} is any new folder outside your copy of
+    WikiRace.
+\begin{lstlisting}[style=shell]
+cp -r wiki_race/player my-crawler
+cd my-crawler
+git init -b main
+git add .
+git commit -m "Crawler"
+git remote add origin https://github.com/<you>/<your-repo>.git
+git push -u origin main
+\end{lstlisting}
+    The \scode{.gitignore} of the template keeps \scode{_build/} and \scode{deps/} out of
+    the repository.
+
+    \item Do not change the files and settings listed in \fref{sec:unchanged}.
+
+    \item Check that the release builds from the root of your repository. The platform
+    builds it with Elixir 1.20 and Erlang/OTP 28.
+\begin{lstlisting}[style=shell]
+MIX_ENV=prod mix deps.get
+MIX_ENV=prod mix release
+\end{lstlisting}
+
+    \item Tag the commit you submit and push the tag.
+\begin{lstlisting}[style=shell]
+git tag -a final -m "Final submission"
+git push origin final
+\end{lstlisting}
+
+    \item Submit your group name, the HTTPS URL of the repository (the one of
+    step~\ref{step:push}), the tag name (\scode{final}), and the commit hash. The
+    following command prints the hash of the tagged commit.
+\begin{lstlisting}[style=shell]
+git rev-list -n 1 final
+\end{lstlisting}
+    % TODO: say where students submit these items and the deadline.
+\end{enumerate}
+
+\section{What you must not change}
+\label{sec:unchanged}
+
+\begin{description}
+    \item[The application name.] \scode{mix.exs} declares \scode{app: :player}. The
+    platform runs your release as \scode{bin/player}, so it cannot start a release with
+    another name.
+
+    \item[The contract.] The files in \scode{lib/wiki_race/} stay as they are in the
+    template. The platform calls your crawler through them.
+
+    \item[The dependencies.] Your crawler depends only on \scode{req} and \scode{floki},
+    as in the template. Commit \scode{mix.lock} so that the platform builds with the
+    versions you tested.
+
+    \item[The node name and the cookie.] Do not set them in \scode{rel/env.sh.eex}, in
+    \scode{rel/vm.args.eex}, or in your code with \scode{Node.start/2} or
+    \scode{Node.set_cookie/1}. The platform sets both each time it starts your crawler.
+\end{description}
+
+\section{The tag}
+
+The platform clones your repository at the tag and prints the commit it cloned for each
+group. That commit is compared with the hash you submit, and it is the commit that is
+graded. Do not move the tag or push it again after the deadline.
+% TODO: say what happens when the cloned commit and the submitted hash differ.
+
+\end{document}
+
+\endinput
