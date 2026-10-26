@@ -10,11 +10,12 @@
     :if={@next_fixture}
     type="button"
     phx-click="start_next"
+    disabled={@starting}
     title={fixture_summary(@next_fixture)}
     class="flex items-center gap-2 rounded-full border-[3px] border-black bg-comic-yellow
            px-5 py-3 font-heading text-lg font-extrabold text-black shadow-comic-pop
-           transition-transform hover:shadow-comic"
+           transition-transform hover:shadow-comic disabled:cursor-wait disabled:opacity-60"
   >
-    ⏭ Next
+    {if @starting, do: "Starting…", else: "⏭ Next"}
   </button>
 </div>

@@ -9,7 +9,8 @@
 # `make dist-certs`. Never committed — regenerated per checkout.
 /deploy/certs/
 
-# Competition-day settings and the finalists' checkouts on the platform VM
-# (see deploy/final/). Never committed.
+# Competition-day settings, the list of groups and their checkouts on the
+# platform VM (see deploy/final/). Never committed.
 /deploy/final/final.env
-/deploy/final/finalists/
+/deploy/final/groups.txt
+/deploy/final/groups/

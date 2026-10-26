@@ -92,59 +92,78 @@ need Docker, because tests tagged `:integration` are excluded by default.
 
 ## Competition day on the university VMs
 
-The scripts in `deploy/final/` set up four Ubuntu 26.04 VMs for a final between two
-groups. Finalist 1 runs on player VM 1 and finalist 2 on player VM 2. Every script needs
-sudo, except `wikirace`. The VMs do not use Docker. Docker Compose is only the local
-simulation of this setup.
+The scripts in `deploy/final/` set up four Ubuntu 26.04 VMs for a tournament. Every
+script needs sudo, except `wikirace`. The VMs do not use Docker. Docker Compose is only the
+local simulation of this setup.
+
+Every group's release is unpacked on both player VMs before the tournament. Each match on
+`/admin` then stops whatever runs on the player VMs, starts its first group on player VM 1
+and its second group on player VM 2, and starts the race once both have joined. A bye
+uses player VM 1 only. So each crawler has its VM to itself, in a fresh BEAM, and nothing
+is built or copied between matches.
 
 1. On each VM, clone this repo. Copy `deploy/final/final.env.example` to
-   `deploy/final/final.env` and fill it in: the IPs of the four VMs, the two finalists
-   (name, GitHub repo, tag), and a cookie for the platform. All four VMs need the same
-   file. It is never committed.
+   `deploy/final/final.env` and fill it in: the IPs of the four VMs, the port of the
+   platform and a cookie for it. All four VMs need the same file. It is never committed.
 2. On the Wikipedia VM, run `sudo deploy/final/setup-wikipedia-vm.sh`. It installs the
    static build of `kiwix-serve` in `/opt/wikirace`, downloads the 52 GB snapshot and
-   runs Kiwix on port 8080 as the systemd service `wikirace-kiwix`, started on boot. The download takes a while, so run it inside `tmux`. To skip the download, copy
-   the snapshot to `.data/zim/wikipedia_en_all_nopic.zim` first.
+   runs Kiwix on port 8080 as the systemd service `wikirace-kiwix`, started on boot. The
+   download takes a while, so run it inside `tmux`. To skip the download, copy the
+   snapshot to `.data/zim/wikipedia_en_all_nopic.zim` first.
 3. On the platform VM, run `sudo deploy/final/setup-platform-vm.sh`. It installs Erlang
    and Elixir (the versions of `.tool-versions`, in `/opt/wikirace`) and the deploy key,
    and runs `mix setup`. The script prints a public key at the end.
 4. On each player VM, run `sudo deploy/final/setup-player-vm.sh "<that public key>"`. It
    creates the `deploy` user and `/home/deploy/releases`, as in `deploy/vm/Dockerfile`.
-5. On the platform VM, as your normal user:
+5. On the platform VM, copy `deploy/final/groups.txt.example` to
+   `deploy/final/groups.txt` and list the groups, one per line:
+   `name | public repository | tag | folder of the player`. The folder defaults to
+   `player`. Write `.` when `mix.exs` is at the root of the repository. The names are the
+   roster of the tournament.
+6. On the platform VM, as your normal user:
 
    ```
-   deploy/final/wikirace fetch          # clones both finalists at their tags
+   deploy/final/wikirace fetch          # clones every group at its tag, prints each commit
+   deploy/final/wikirace check          # Kiwix, the groups, SSH to both player VMs
+   deploy/final/wikirace deploy         # builds every release, copies it to both player VMs
    deploy/final/wikirace server         # in tmux: the platform, on PLATFORM_PORT
-   deploy/final/wikirace check          # in another terminal
-   deploy/final/wikirace deploy all
-   deploy/final/wikirace start all
    ```
 
-6. On each player VM, run `sudo deploy/final/setup-player-vm.sh --lockdown`. A firewall
+   `deploy` takes one to two minutes per group, so run it the day before. A group that
+   fails does not stop the others, and the failures are listed at the end.
+   `wikirace deploy "<name>"` builds and copies one group again.
+7. On each player VM, run `sudo deploy/final/setup-player-vm.sh --lockdown`. A firewall
    then allows outgoing traffic only to Kiwix and to the platform, like the internal
    networks of `docker-compose.yml`. A crawler cannot reach the internet or the other
    player VM. `wikirace check` shows `internet from player: blocked`.
-7. Open `http://<PLATFORM_IP>:<PLATFORM_PORT>/admin` and start the race. `PLATFORM_PORT` in
-   `final.env` defaults to 4000. The university network may block it between the classroom
-   and the VMs, so use a port it lets through, such as 8080 (`nc -zv <PLATFORM_IP> <port>`
-   from a classroom machine answers `Connection refused`, not `timed out`, for an open port
-   with nothing listening).
+8. Open `http://<PLATFORM_IP>:<PLATFORM_PORT>/admin`. Each click on the start button
+   starts the crawlers of the next match, which takes a few seconds, and then the race.
+   `PLATFORM_PORT` in `final.env` defaults to 4000. The university network may block it
+   between the classroom and the VMs, so use a port it lets through, such as 8080
+   (`nc -zv <PLATFORM_IP> <port>` from a classroom machine answers `Connection refused`,
+   not `timed out`, for an open port with nothing listening).
+9. At the end, `deploy/final/wikirace stop` stops every crawler on both player VMs.
 
 The name `kiwix1` points at the Wikipedia VM on the platform VM and on the player VMs, so
-the crawlers get the same URLs as in the local setup. The platform runs with
-`WIKI_RACE_FINAL=true`. With it, `config/dev.exs` uses the two finalists as the roster,
-and `priv/groups.exs` adds their entries, with the node `finalistN@<PLAYERN_IP>`.
+the crawlers get the same URLs as in the local setup. `wikirace` runs the platform with
+`WIKI_RACE_VMS=true`. With it, `config/runtime.exs` takes the roster from `groups.txt`
+and keeps the Swiss tournament of `config/config.exs` (4 rounds, with its
+`round_pairs`), and `priv/groups.exs` holds only the groups of `groups.txt`.
 
 **Releases without Docker.** Locally, `Deploy.Release` builds a release in the
 `release_builder` container, so that it runs on the simulated VMs. On the university VMs,
-`WIKI_RACE_FINAL=true` also sets `config :wiki_race_platform, :deploy, builder: :native`.
+`WIKI_RACE_VMS=true` also sets `config :wiki_race_platform, :deploy, builder: :native`.
 The platform VM then builds the release in the checkout of the group, with its own
 Erlang and Elixir. The release includes that Erlang runtime. All four VMs run the same
 Ubuntu, so it runs on the player VMs.
 
-**After a platform restart.** The releases keep running, but the platform no longer
-knows them. Run `deploy/final/wikirace connect all`. Do not run `start` again, because
-the node name on the player VM is still taken.
+**One folder per group.** Every group ships the app `player`, so a release unpacks into
+`/home/deploy/releases/<slug>`, where the slug is the name of the group in lowercase
+with `_` for spaces. The node of a group is `<slug>@<player VM IP>`, and every start
+gets a new random cookie.
+
+**After a platform restart.** Nothing to do. The next match stops whatever still runs on
+the player VMs and starts its own crawlers.
 
 **Distinct cookies and `:global`.** Each player has its own cookie, so the two players
 never connect to each other. `:global` sees this as an overlapping partition, and with
@@ -156,11 +175,8 @@ to the range 9100 to 9109, which the firewall opens to the platform. The groups 
 change anything. This applies to any platform node that connects to two deployed
 players, including the simulated VMs above.
 
-**One release per player VM.** A deploy unpacks into `/home/deploy/releases/<app>`, and
-every group ships the app `player`. A player VM holds one group at a time.
-
 **Results.** Finished races are saved in `platform/priv/data/results.terms`. "Restart
-tournament" on `/admin` starts the match again.
+tournament" on `/admin` starts the tournament again.
 
 ## Security
 

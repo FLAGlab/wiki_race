@@ -80,6 +80,12 @@ defmodule WikiRacePlatform.Deploy.Server do
   Builds, uploads, and unpacks `group_name`'s release onto `target`. Returns
   immediately; watch `subscribe/1`.
 
+  `target` may also be a list of targets. The release is then built once
+  and unpacked on every one of them, and the first one is the target that
+  `start!/2` and `stop!/2` use. On the university VMs every group goes to
+  both player VMs this way, and `WikiRacePlatform.Deploy.Match` picks the
+  VM for each match.
+
   `cookie` comes after `server`, so every existing 3-arg call (`deploy!(name,
   target, server)`) keeps meaning what it always meant. It lets a caller
   that needs to reach this same deploy again from a different process (the
@@ -89,7 +95,7 @@ defmodule WikiRacePlatform.Deploy.Server do
   `reattach!/4`. `nil` (the default) generates one internally, exactly as
   before.
   """
-  @spec deploy!(String.t(), target(), GenServer.server(), String.t() | nil) ::
+  @spec deploy!(String.t(), target() | [target()], GenServer.server(), String.t() | nil) ::
           :ok | {:error, String.t()}
   def deploy!(group_name, target, server \\ __MODULE__, cookie \\ nil) do
     GenServer.call(server, {:deploy, group_name, target, cookie})
@@ -121,6 +127,36 @@ defmodule WikiRacePlatform.Deploy.Server do
   def stop!(group_name, server \\ __MODULE__) do
     GenServer.call(server, {:stop, group_name})
   end
+
+  @doc """
+  Stops every release running on `host`, whichever group it belongs to, and
+  waits until they are gone. Blocks until done.
+
+  Used by `WikiRacePlatform.Deploy.Match` before each match, so a crawler
+  has its player VM to itself. It needs no cookie, so it also works after a
+  platform restart, when this server no longer knows what runs there.
+  """
+  @spec clear_host(String.t(), GenServer.server()) :: :ok | {:error, term()}
+  def clear_host(host, server \\ __MODULE__) do
+    GenServer.call(server, {:clear_host, host}, 30_000)
+  end
+
+  @doc """
+  The folder of `group`'s release under `/home/deploy/releases`: its `slug`
+  when the manifest sets one (every group of `deploy/final/groups.txt`),
+  otherwise its app name. Every group ships the app `player`, so only the
+  slug lets several groups share a player VM.
+  """
+  @spec release_dir(map()) :: String.t()
+  def release_dir(group), do: Map.get(group, :slug) || Atom.to_string(group.app)
+
+  @doc """
+  A fresh secret for one release, known only to it and the harness node
+  that connects to it. Never this app's own cookie, and never shared with
+  any other player's deploy.
+  """
+  @spec new_cookie() :: String.t()
+  def new_cookie, do: :crypto.strong_rand_bytes(16) |> Base.encode16()
 
   @doc "This group's last known status and whether its target node is currently connected."
   @spec status(String.t(), GenServer.server()) :: %{
@@ -194,14 +230,19 @@ defmodule WikiRacePlatform.Deploy.Server do
         group = WikiRacePlatform.Deploy.Manifest.group!(group_name)
         transport = state.transport
         release_builder = state.release_builder
-        cookie = given_cookie || random_cookie()
+        cookie = given_cookie || new_cookie()
+        targets = List.wrap(target)
 
         Task.Supervisor.start_child(state.task_supervisor, fn ->
-          run_deploy(server, transport, release_builder, group, target)
+          run_deploy(server, transport, release_builder, group, targets)
         end)
 
         {:reply, :ok,
-         put_status(state, group_name, :building, target: target, cookie: cookie, log: [])}
+         put_status(state, group_name, :building,
+           target: hd(targets),
+           cookie: cookie,
+           log: []
+         )}
     end
   end
 
@@ -259,6 +300,25 @@ defmodule WikiRacePlatform.Deploy.Server do
       _ ->
         {:reply, {:error, "#{group_name} has no deploy target yet"}, state}
     end
+  end
+
+  def handle_call({:clear_host, host}, from, state) do
+    transport = state.transport
+
+    Task.Supervisor.start_child(state.task_supervisor, fn ->
+      GenServer.reply(from, run_clear_host(transport, host))
+    end)
+
+    groups =
+      Map.new(state.groups, fn
+        {name, %{target: %{host: ^host}, status: :running} = entry} ->
+          {name, %{entry | status: :stopped}}
+
+        other ->
+          other
+      end)
+
+    {:noreply, %{state | groups: groups}}
   end
 
   def handle_call({:status, group_name}, _from, state) do
@@ -328,20 +388,13 @@ defmodule WikiRacePlatform.Deploy.Server do
   # Deploy pipeline, running inside a Task. Every step reports back to the
   # GenServer by name/pid (`server`) and never touches its state directly.
 
-  defp run_deploy(server, transport, release_builder, group, target) do
+  defp run_deploy(server, transport, release_builder, group, targets) do
     on_output = fn line -> GenServer.cast(server, {:log, group.name, line}) end
 
     result =
       with {:ok, tarball} <- release_builder.build(group, on_output),
            :ok <- GenServer.cast(server, {:status, group.name, :uploading}),
-           ssh_opts = ssh_opts(),
-           {:ok, conn} <- transport.connect(target.host, ssh_opts),
-           :ok <- transport.exec(conn, "mkdir -p #{@remote_dir}") |> ok_or_error(),
-           remote_tarball = "#{@remote_dir}/#{group.app}.tar.gz",
-           :ok <- transport.upload(conn, tarball, remote_tarball),
-           unpack = "tar -xzf #{remote_tarball} -C #{@remote_dir}",
-           :ok <- transport.exec(conn, unpack) |> ok_or_error(),
-           :ok <- transport.close(conn) do
+           :ok <- upload_to_all(transport, group, tarball, targets, on_output) do
         File.rm(tarball)
         :ok
       else
@@ -351,6 +404,50 @@ defmodule WikiRacePlatform.Deploy.Server do
     case result do
       :ok -> GenServer.cast(server, {:status, group.name, :stopped})
       {:error, reason} -> GenServer.cast(server, {:status, group.name, {:error, reason}})
+    end
+  end
+
+  defp upload_to_all(transport, group, tarball, targets, on_output) do
+    Enum.reduce_while(targets, :ok, fn target, :ok ->
+      on_output.("uploading to #{target.host}")
+
+      case upload(transport, group, tarball, target) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, {target.host, reason}}}
+      end
+    end)
+  end
+
+  # The tarball holds one folder named after the app. It is unpacked into
+  # the group's own folder (`release_dir/1`), so groups never overwrite
+  # each other's release.
+  defp upload(transport, group, tarball, target) do
+    dir = release_dir(group)
+    remote_tarball = "#{@remote_dir}/#{dir}.tar.gz"
+    remote_app_dir = "#{@remote_dir}/#{dir}"
+
+    with {:ok, conn} <- transport.connect(target.host, ssh_opts()),
+         :ok <- transport.exec(conn, "mkdir -p #{remote_app_dir}") |> ok_or_error(),
+         :ok <- transport.upload(conn, tarball, remote_tarball),
+         unpack = "tar -xzf #{remote_tarball} -C #{remote_app_dir} --strip-components=1",
+         :ok <- transport.exec(conn, unpack) |> ok_or_error() do
+      transport.close(conn)
+    end
+  end
+
+  # SIGTERM makes a BEAM shut down cleanly. Only the releases of the
+  # deploy user run there, so every beam.smp of that user is a release.
+  # The loop waits until they are gone, so a group started next on this
+  # host never finds its node name still taken.
+  @clear_cmd "pkill -U \"$(id -u)\" -x beam.smp; " <>
+               "for i in $(seq 1 50); do " <>
+               "pgrep -U \"$(id -u)\" -x beam.smp >/dev/null || exit 0; sleep 0.2; done; " <>
+               "pkill -KILL -U \"$(id -u)\" -x beam.smp; exit 0"
+
+  defp run_clear_host(transport, host) do
+    with {:ok, conn} <- transport.connect(host, ssh_opts()),
+         :ok <- transport.exec(conn, @clear_cmd) |> ok_or_error() do
+      transport.close(conn)
     end
   end
 
@@ -366,7 +463,7 @@ defmodule WikiRacePlatform.Deploy.Server do
          join_timeout_ms,
          join_poll_ms
        ) do
-    remote_app_dir = "#{@remote_dir}/#{group.app}"
+    remote_app_dir = "#{@remote_dir}/#{release_dir(group)}"
 
     result =
       with {:ok, conn} <- transport.connect(target.host, ssh_opts()),
@@ -414,7 +511,7 @@ defmodule WikiRacePlatform.Deploy.Server do
   end
 
   defp run_stop(server, transport, group, target, cookie) do
-    remote_app_dir = "#{@remote_dir}/#{group.app}"
+    remote_app_dir = "#{@remote_dir}/#{release_dir(group)}"
 
     # `bin/<app> stop` opens its own short-lived node to RPC the running one
     # into stopping. That ephemeral node needs the same cookie/distribution
@@ -538,11 +635,6 @@ defmodule WikiRacePlatform.Deploy.Server do
     File.rm(local_path)
     result
   end
-
-  # A fresh secret per deploy, known only to this specific player release
-  # and the harness node that connects to it. Never this app's own cookie,
-  # and never shared with any other player's deploy.
-  defp random_cookie, do: :crypto.strong_rand_bytes(16) |> Base.encode16()
 
   defp ok_or_error({:ok, _output, 0}), do: :ok
   defp ok_or_error({:ok, output, status}), do: {:error, "exit #{status}: #{output}"}

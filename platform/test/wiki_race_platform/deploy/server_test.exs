@@ -240,6 +240,98 @@ defmodule WikiRacePlatform.Deploy.ServerTest do
     assert_receive {:deploy_update, @group, :stopped, nil}, 1_000
   end
 
+  test "deploy! to several targets builds once and unpacks on every host" do
+    test_pid = self()
+
+    FakeRelease.script(%{
+      build: fn _group, _on_output ->
+        send(test_pid, :built)
+        {:ok, "/tmp/fake.tar.gz"}
+      end
+    })
+
+    FakeTransport.script(%{
+      exec: fn {:fake_conn, host}, command ->
+        send(test_pid, {:exec, host, command})
+        {:ok, "", 0}
+      end
+    })
+
+    server = start_server([])
+    Server.subscribe(@group)
+
+    targets = [
+      %{host: "vm1", node: :local_fixture@vm1},
+      %{host: "vm2", node: :local_fixture@vm2}
+    ]
+
+    assert :ok = Server.deploy!(@group, targets, server)
+    drain_deploy(@group)
+
+    assert_received :built
+    refute_received :built
+
+    for host <- ["vm1", "vm2"] do
+      assert_received {:exec, ^host, "tar -xzf /home/deploy/releases/player.tar.gz" <> _}
+    end
+  end
+
+  test "a group with a slug gets its own release folder" do
+    test_pid = self()
+    group = %{name: "Los Cangrejos", slug: "los_cangrejos", app: :player}
+
+    assert Server.release_dir(group) == "los_cangrejos"
+    assert Server.release_dir(%{name: "x", app: :player}) == "player"
+
+    FakeTransport.script(%{
+      exec: fn _conn, command ->
+        send(test_pid, {:exec, command})
+        {:ok, "", 0}
+      end
+    })
+
+    # Deploy the local fixture, then check where it unpacks: the manifest
+    # entries of the local setup have no slug, so they keep the app folder.
+    server = start_server([])
+    Server.subscribe(@group)
+    Server.deploy!(@group, @target, server)
+    drain_deploy(@group)
+
+    assert_received {:exec, "mkdir -p /home/deploy/releases/player"}
+
+    assert_received {:exec,
+                     "tar -xzf /home/deploy/releases/player.tar.gz -C /home/deploy/releases/player --strip-components=1"}
+  end
+
+  test "clear_host stops every release on that host and marks its group stopped" do
+    test_pid = self()
+
+    FakeTransport.script(%{
+      exec: fn {:fake_conn, host}, command ->
+        send(test_pid, {:exec, host, command})
+        {:ok, "", 0}
+      end
+    })
+
+    server = start_server(connected_nodes: fn -> [@target.node] end)
+    Server.subscribe(@group)
+    Server.deploy!(@group, @target, server)
+    drain_deploy(@group)
+    Server.start!(@group, server)
+    assert_receive {:deploy_update, @group, :running, nil}, 1_000
+
+    assert :ok = Server.clear_host(@target.host, server)
+    assert_received {:exec, "player_vm1", "pkill -U" <> _}
+    assert Server.status(@group, server).deploy == :stopped
+  end
+
+  test "clear_host reports an unreachable host" do
+    FakeTransport.script(%{connect: fn _host, _opts -> {:error, :econnrefused} end})
+    server = start_server([])
+
+    assert {:error, :econnrefused} = Server.clear_host("vm9", server)
+  end
+
   # Consumes the deploy sequence's broadcasts up through :stopped, so a test
   # driving start!/stop! afterwards starts from a clean mailbox.
   defp drain_deploy(group) do

@@ -53,20 +53,10 @@ config :wiki_race_platform, dev_routes: true
 # how these two names resolve to the actual connected nodes.
 #
 # On the university VMs the platform also runs in dev mode, started by
-# `deploy/final/wikirace` with WIKI_RACE_FINAL=true. The roster is then the
-# two finalists of `deploy/final/final.env`, which priv/groups.exs resolves
-# to the nodes on the player VMs. One match, with the first pair of
-# `round_pairs` in config.exs (the admin page can change it). The VMs have
-# no Docker. All four run the same Ubuntu, so the platform VM builds the
-# releases with its own Erlang and Elixir.
-if System.get_env("WIKI_RACE_FINAL") == "true" do
-  config :wiki_race_platform, :tournament,
-    roster: [System.fetch_env!("FINALIST1_NAME"), System.fetch_env!("FINALIST2_NAME")],
-    generator: :round_robin,
-    total_rounds: 1
-
-  config :wiki_race_platform, :deploy, builder: :native
-else
+# `deploy/final/wikirace` with WIKI_RACE_VMS=true. The tournament of
+# config.exs applies there, with the groups of `deploy/final/groups.txt` as
+# its roster (see config/runtime.exs).
+if System.get_env("WIKI_RACE_VMS") != "true" do
   config :wiki_race_platform, :tournament,
     roster: ["player1", "player2"],
     generator: :round_robin,

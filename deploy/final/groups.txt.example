@@ -1,0 +1,12 @@
+# Copy to groups.txt (never committed), on the platform VM only, and list
+# every group of the tournament, one per line:
+#
+#   name | public repository | tag | folder of the player in the repository
+#
+# The name is what the dashboard and the standings show. The folder is
+# optional and defaults to `player`, as in the template. Use `.` when the
+# repository has mix.exs at its root. `wikirace fetch` clones each group
+# into deploy/final/groups/<name in lowercase, with _ for spaces>.
+
+Los Cangrejos | https://github.com/someone/wiki_race.git | final
+Mutex Maniacs | https://github.com/someone-else/crawler.git | final | .
