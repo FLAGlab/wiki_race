@@ -1,0 +1,257 @@
+\usepackage[american]{babel}
+\selectlanguage{american}
+\usepackage[utf8]{inputenc}
+\usepackage{fullpage}
+
+\setlength{\parindent}{0pt}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb} 
+\usepackage{adjustbox}
+\usepackage{graphicx} 
+\usepackage{xcolor}
+\usepackage[inline]{enumitem}
+\usepackage{subcaption}
+\usepackage{caption} 
+\usepackage{amsthm}
+\usepackage{listings} 
+\usepackage{float}
+\usepackage[plain]{fancyref}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{framed}
+\usepackage{acronym}
+\usepackage[scr]{rsfso}
+\usepackage{fancyhdr}
+%\usepackage[spanish, es-tabla]{babel}    
+
+\newcommand{\powerset}{\raisebox{.15\baselineskip}{\Large\ensuremath{\wp}}}
+
+%% Entornos
+\newtheorem{exercise}{Task}
+\newtheorem{solution}{Soluci\'on}
+
+%Avoid italics
+\let\origExercise\exercise
+\let\origendExercise\endexercise
+\renewenvironment{exercise}{\origExercise\upshape}{\origendExercise}
+
+\let\origSolution\solution
+\let\origendSolution\endsolution
+\renewenvironment{solution}{\origSolution\upshape}{\origendSolution}
+
+%%
+\newenvironment{disclamer}
+{\vspace{0.4cm}}
+{\makebox[\linewidth]{\rule{\linewidth}{0.4pt}}\vspace{0.5cm}}
+
+%Header 
+%\let\origNewpage\newpage
+%\renewcommand{\newpage}{
+%\origNewpage 
+%\noindent \begin{tabular}{cc} 
+%\noindent\begin{tabular}{c} 
+%\includegraphics{logo_uniandes.jpg} 
+%\end{tabular}
+%& 
+%\noindent \begin{tabular}{l}
+%ISIS-1104  Matem\'atica Estructural y L\'ogica,  Secci\'on 3\\
+%Parcial 3 - \today\\ 
+%C\'odigo:  \\
+%\end{tabular}
+%\end{tabular} 
+%}
+
+% listings
+\lstset
+ {basicstyle=\small\ttfamily,
+  numberbychapter=false}
+
+\lstset{%
+  aboveskip=0\baselineskip,
+  belowskip=0\baselineskip,
+  commentstyle=\small\ttfamily\itshape,
+  breaklines,
+  numbers=left,
+  numberblanklines=false,
+  numberstyle=\tiny\color{gray}, 
+  numbersep=3pt,
+  escapechar=`}
+   
+  \lstdefinestyle{floating}{%
+  frame=lines,
+  float=htb,
+  captionpos=b,
+  aboveskip=0pt,
+  belowskip=0pt,
+  abovecaptionskip=-0pt
+}
+
+%References
+
+\captionsetup[subfigure]{subrefformat=simple,labelformat=simple}
+\renewcommand\thesubfigure{(\alph{subfigure})}
+
+%% Listings
+\def\fref{\Fref} % treat all \frefs as \Frefs
+\renewcommand{\lstlistingname}{Snippet}
+\newcommand*{\fancyreflstlabelprefix}{lst}
+\newcommand*{\Freflstname}{\lstlistingname}
+\newcommand*{\freflstname}{\MakeLowercase{\lstlistingname}}
+\Frefformat{vario}{\fancyreflstlabelprefix}%
+  {\Freflstname\fancyrefdefaultspacing#1#3}
+\frefformat{vario}{\fancyreflstlabelprefix}%
+  {\freflstname\fancyrefdefaultspacing#1#3}
+\Frefformat{plain}{\fancyreflstlabelprefix}%
+  {\Freflstname\fancyrefdefaultspacing#1}
+\frefformat{plain}{\fancyreflstlabelprefix}%
+  {\freflstname\fancyrefdefaultspacing#1}
+  
+  
+% ln delimiter
+\newcommand*{\fancyreflnlabelprefix}{ln}
+\newcommand*{\Freflnname}{Linea}
+\newcommand*{\freflnname}{\MakeLowercase{\Freflnname}}
+\Frefformat{vario}{\fancyreflnlabelprefix}%
+  {\Freflnname\fancyrefdefaultspacing#1#3}
+\frefformat{vario}{\fancyreflnlabelprefix}%
+  {\freflnname\fancyrefdefaultspacing#1#3}
+\Frefformat{plain}{\fancyreflnlabelprefix}%
+  {\Freflnname\fancyrefdefaultspacing#1}
+\frefformat{plain}{\fancyreflnlabelprefix}%
+  {\freflnname\fancyrefdefaultspacing#1}    
+  
+
+\definecolor{OliveGreen}{rgb}{0.13,0.55,0.13}
+\definecolor{ElixirPurple}{HTML}{6E4A7E}
+
+% Java listings
+\lstdefinestyle{java}
+ {language=Java,
+  showstringspaces=false,
+  keywordstyle=\color{purple}\tt\bf,
+  tabsize=3,
+  style=floating,
+  comment=[l]\#,
+  commentstyle=\color{gray}\ttfamily,
+  stringstyle=\color{OliveGreen}\ttfamily,
+  morekeywords={def, method, var, defvar, defun, defmethod, list, cons, using, as, repeat, end, procedure, begin, function, not, skip, then}
+}
+
+\lstdefinestyle{tjava}
+ {language=Java,
+  showstringspaces=false,
+  keywordstyle=\color{purple}\tt\bf,
+  tabsize=3,
+  style=floating,
+  commentstyle=\color{gray}\ttfamily,
+  stringstyle=\color{OliveGreen}\ttfamily,
+  morekeywords={K, E, S, T, R, N, I, B, V, m, ., (, )}
+}
+  
+% Smalltalk listings
+\lstdefinestyle{smalltalk}
+ {language={},
+  showstringspaces=false,
+  keywordstyle=\tt\bf,
+  tabsize=3,
+  style=floating,
+  commentstyle=\color{gray}\ttfamily,
+  stringstyle=\color{OliveGreen}\ttfamily,
+  morekeywords={proc, |, ., [, ], :=}
+}
+
+%Elixir listings
+\lstdefinestyle{elixir}
+ {language=erlang,
+  basicstyle=\footnotesize\ttfamily,
+  showstringspaces=false,
+  tabsize=2,
+  style=floating,
+  breaklines=true,
+  comment=[l]\#,
+  commentstyle=\color{gray}\itshape\ttfamily,
+  stringstyle=\color{OliveGreen}\ttfamily,
+  keywordstyle={\ttfamily},
+  keywordstyle=[1]{\color{ElixirPurple}\bfseries},
+  keywordstyle=[2]{\color{ElixirPurple}\bfseries},
+  keywordstyle=[3]{\color{ElixirPurple}\bfseries},
+  otherkeywords={},
+  morekeywords=[1]{defp, def, do, end, defmodule, defmacro, defstruct, if, else, when, case,
+    fun, unless, cond, fn, receive, catch, try, rescue, after, with, for, import, alias,
+    require, use, quote, unquote, throw, raise, in, not, and, or},
+  morekeywords=[2]{@doc, @spec, @callback, @behaviour, @moduledoc, @type, @typep, @opaque,
+    @impl},
+  morekeywords=[3]{true, false, nil, __MODULE__}
+}
+
+%Mozart listings
+\lstdefinestyle{mozart}
+ {language={},
+  showstringspaces=false,
+  keywordstyle=\color{magenta}\ttfamily\textbf,
+  tabsize=2,
+  style=floating,
+  breaklines=true,
+  comment=[l]\#,
+  commentstyle=\color{gray}\ttfamily,
+  stringstyle=\color{OliveGreen}\ttfamily,
+  morekeywords={local, end, proc, in, if, then, else, @, :=, fun}
+}
+
+% Tables
+\usepackage{array}
+\newcolumntype{C}{>{\centering\arraybackslash}p{1.2cm}}
+\renewcommand*{\arraystretch}{1.7}
+
+
+%java environment    
+\lstnewenvironment{java}[1][]
+ {\lstset{style=java,#1}}{}  
+
+%tjava environment    
+\lstnewenvironment{tjava}[1][]
+ {\lstset{style=tjava,#1}}{}  
+
+
+%Elixir environment
+\lstnewenvironment{elixir}[1][]
+ {\lstset{style=elixir,#1}}{}
+
+%LRP environment    
+\lstnewenvironment{smalltalk}[1][]
+ {\lstset{style=smalltalk,#1}}{}  
+ 
+ %Mozart environment    
+\lstnewenvironment{mozart}[1][]
+ {\lstset{style=mozart,#1}}{}  
+
+\lstnewenvironment{code}[1][]
+ {\lstset{numbers=left,escapechar=`,caption=b,basicstyle=\small\ttfamily,#1}}{}
+ 
+ % in line source-code
+\newcommand{\javacode}[1]{\textrm{\texttt{#1}}}
+\def\javacode{\lstinline[style=java]}
+
+\newcommand{\stcode}[1]{\textrm{\texttt{#1}}}
+\def\lrpcode{\lstinline[style=smalltalk]}
+
+\newcommand{\scode}[1]{\textrm{\texttt{#1}}}
+\def\scode{\lstinline[style=elixir]}
+
+\newcommand{\console}[1]{\textrm{\small\ttfamily{#1}}}
+\def\console{\lstinline[style=lrp]} 
+
+\newcommand{\mozcode}[1]{\textrm{\small\ttfamily{#1}}}
+\def\console{\lstinline[style=mozart]} 
+
+%Commands
+\newcommand{\eg}{\emph{e.g.,}~}
+\newcommand{\ie}{\emph{i.e.,}~}
+\newcommand{\cf}{\emph{cf.}~}
+
+%\input{acronyms}
+
+\endinput
+
