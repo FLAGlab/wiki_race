@@ -59,6 +59,17 @@ defmodule WikiRacePlatform.Deploy.Server do
 
   @remote_dir "/home/deploy/releases"
 
+  # Kernel flags for every player release, passed in `ERL_AFLAGS` so the
+  # group's own code and vm.args stay untouched. Each player has its own
+  # cookie, so two players never connect to each other. With the default
+  # `prevent_overlapping_partitions true`, `:global` treats that as an
+  # overlapping partition and disconnects one player from the harness as
+  # soon as the second one joins. The listen range pins the distribution
+  # port, so the player VM firewall only needs to open 4369 and this range
+  # to the platform (see deploy/final/).
+  @player_erl_flags "-kernel prevent_overlapping_partitions false " <>
+                      "inet_dist_listen_min 9100 inet_dist_listen_max 9109"
+
   # Client
 
   def start_link(opts \\ []) do
@@ -373,6 +384,7 @@ defmodule WikiRacePlatform.Deploy.Server do
            # its own cookie.
            start_cmd =
              "cd #{remote_app_dir} && #{vm_args_env}" <>
+               "ERL_AFLAGS='#{@player_erl_flags}' " <>
                "RELEASE_COOKIE=#{cookie} RELEASE_NODE=#{target.node} " <>
                "RELEASE_DISTRIBUTION=name START_HARNESS=false bin/#{group.app} daemon",
            :ok <- transport.exec(conn, start_cmd) |> ok_or_error(),

@@ -51,10 +51,27 @@ config :wiki_race_platform, dev_routes: true
 # /admin, instead of config/config.exs's roster (a real tournament's
 # groups, which player1/player2 aren't part of). See priv/groups.exs for
 # how these two names resolve to the actual connected nodes.
-config :wiki_race_platform, :tournament,
-  roster: ["player1", "player2"],
-  generator: :round_robin,
-  total_rounds: 1
+#
+# On the university VMs the platform also runs in dev mode, started by
+# `deploy/final/wikirace` with WIKI_RACE_FINAL=true. The roster is then the
+# two finalists of `deploy/final/final.env`, which priv/groups.exs resolves
+# to the nodes on the player VMs. One match, with the first pair of
+# `round_pairs` in config.exs (the admin page can change it). The VMs have
+# no Docker. All four run the same Ubuntu, so the platform VM builds the
+# releases with its own Erlang and Elixir.
+if System.get_env("WIKI_RACE_FINAL") == "true" do
+  config :wiki_race_platform, :tournament,
+    roster: [System.fetch_env!("FINALIST1_NAME"), System.fetch_env!("FINALIST2_NAME")],
+    generator: :round_robin,
+    total_rounds: 1
+
+  config :wiki_race_platform, :deploy, builder: :native
+else
+  config :wiki_race_platform, :tournament,
+    roster: ["player1", "player2"],
+    generator: :round_robin,
+    total_rounds: 1
+end
 
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"

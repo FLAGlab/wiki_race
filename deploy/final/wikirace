@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Runs the platform and the deploy commands on the platform VM, with the
+# settings of final.env. Run it as your normal user, never with sudo.
+#
+#   wikirace server            the platform, in the foreground (run it in tmux)
+#   wikirace fetch             clones both finalists at their tags
+#   wikirace check             checks Kiwix, the manifest, and SSH to both player VMs
+#   wikirace deploy 1|2|all    builds a release and copies it to its player VM
+#   wikirace start 1|2|all     starts it and joins it to the platform
+#   wikirace stop 1|2|all      stops it
+#   wikirace connect 1|2|all   joins a running release again, after a platform restart
+#
+# deploy, start, stop and connect need `wikirace server` to be running.
+
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+[ "$(id -u)" -ne 0 ] || die "run wikirace as your normal user, not with sudo"
+load_env WIKI_IP PLATFORM_IP PLAYER1_IP PLAYER2_IP KIWIX_BOOK PLATFORM_COOKIE \
+  FINALIST1_NAME FINALIST1_REPO FINALIST1_TAG FINALIST2_NAME FINALIST2_REPO FINALIST2_TAG
+
+export PATH="$ELIXIR_DIR/bin:$OTP_DIR/bin:$PATH"
+export WIKI_RACE_FINAL=true
+export KIWIX_BASE_URL=http://kiwix1:8080
+export KIWIX_BOOK
+export PORT=4000
+PLATFORM_NODE="platform@$PLATFORM_IP"
+
+cd "$REPO_ROOT/platform"
+
+# The finalists named by "1", "2" or "all".
+finalists() {
+  case "${1:-}" in
+    1 | 2) echo "$1" ;;
+    all) echo 1 2 ;;
+    *) die "expected 1, 2 or all" ;;
+  esac
+}
+
+# A mix task on a short-lived node. The harness runs on the platform node,
+# so `join` happens there and the player stays connected after this exits.
+platform_task() {
+  local task="$1" n="$2" name_var="FINALIST${2}_NAME"
+  HARNESS_NODE="$PLATFORM_NODE" START_HARNESS=false \
+    elixir --name "wikirace-$task-$$-$n@$PLATFORM_IP" --cookie "$PLATFORM_COOKIE" \
+    -S mix "wiki_race.$task" "${!name_var}"
+}
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  server)
+    epmd -names 2>/dev/null | grep -q "^name platform " && die "the platform is already running"
+    exec elixir --name "$PLATFORM_NODE" --cookie "$PLATFORM_COOKIE" -S mix phx.server
+    ;;
+
+  fetch)
+    for n in 1 2; do
+      repo_var="FINALIST${n}_REPO" tag_var="FINALIST${n}_TAG" dir="$FINAL_DIR/finalists/$n"
+      step "Finalist $n: ${!repo_var} at ${!tag_var}"
+      rm -rf "$dir"
+      git clone --quiet --depth 1 --branch "${!tag_var}" "${!repo_var}" "$dir"
+      echo "commit $(git -C "$dir" rev-parse HEAD)"
+    done
+    ;;
+
+  check)
+    step "Kiwix"
+    curl -fsS -o /dev/null -L "$KIWIX_BASE_URL/content/$KIWIX_BOOK/Tiger" && echo "ok: $KIWIX_BASE_URL"
+    step "Manifest, article pairs and player VMs"
+    mix run --no-start -e '
+      alias WikiRacePlatform.Deploy.{Manifest, Transport}
+      {:ok, _} = Application.ensure_all_started([:ssh, :req])
+      IO.inspect(Manifest.check_groups(), label: "check_groups")
+      IO.inspect(WikiRacePlatform.Articles.check_pairs(), label: "check_pairs")
+      config = Application.get_env(:wiki_race_platform, :deploy)
+      opts = [user: config[:ssh_user], user_dir: Path.expand(config[:ssh_user_dir])]
+      for name <- [System.fetch_env!("FINALIST1_NAME"), System.fetch_env!("FINALIST2_NAME")] do
+        group = Manifest.group!(name)
+        IO.puts("\n#{name}: #{group.node} on #{group.host}")
+        with {:ok, conn} <- Transport.SSH.connect(group.host, opts) do
+          cmd = "id -un; ls -d /home/deploy/releases; " <>
+            "curl -s -o /dev/null -w \"kiwix from player: HTTP %{http_code}\\n\" -L http://kiwix1:8080/; " <>
+            "curl -s -m 5 -o /dev/null -w \"internet from player: HTTP %{http_code}\\n\" https://en.wikipedia.org/ || echo \"internet from player: blocked\""
+          {:ok, out, _} = Transport.SSH.exec(conn, cmd)
+          IO.write(out)
+          Transport.SSH.close(conn)
+        else
+          error -> IO.puts("SSH failed: #{inspect(error)}")
+        end
+      end'
+    ;;
+
+  deploy | start | stop | connect)
+    for n in $(finalists "${1:-}"); do
+      step "$cmd finalist $n"
+      platform_task "$cmd" "$n"
+    done
+    ;;
+
+  *)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+    ;;
+esac
