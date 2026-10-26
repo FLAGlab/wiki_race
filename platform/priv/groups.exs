@@ -47,6 +47,33 @@
 # still has something real to check; they're not actually used to
 # build/ship anything for this fixture, since nothing here ever calls
 # `mix wiki_race.deploy`.
+#
+# The two finalists come from `deploy/final/final.env` and only exist when
+# `WIKI_RACE_FINAL=true` (set by `deploy/final/wikirace`). Without it the
+# manifest stays the local one, so `check_groups/0` and its test never
+# see checkouts that only exist on the platform VM. Finalist N runs on
+# player VM N, under the node name `finalistN@<PLAYERN_IP>`.
+
+finalist = fn n ->
+  ip = System.fetch_env!("PLAYER#{n}_IP")
+
+  %{
+    name: System.fetch_env!("FINALIST#{n}_NAME"),
+    app: String.to_atom(System.get_env("FINALIST#{n}_APP", "player")),
+    repo: System.fetch_env!("FINALIST#{n}_REPO"),
+    tag: System.fetch_env!("FINALIST#{n}_TAG"),
+    sha: "see `git -C <path> rev-parse HEAD`",
+    path: Path.expand("../deploy/final/finalists/#{n}", File.cwd!()),
+    module: nil,
+    host: ip,
+    node: :"finalist#{n}@#{ip}"
+  }
+end
+
+finalists =
+  if System.get_env("WIKI_RACE_FINAL") == "true",
+    do: [finalist.(1), finalist.(2)],
+    else: []
 
 [
   %{
@@ -115,4 +142,4 @@
     host: nil,
     node: :"racecond@platform"
   }
-]
+] ++ finalists
