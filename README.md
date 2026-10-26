@@ -53,7 +53,8 @@ On competition day there are four machines on a private network:
 The steps are:
 
 1. Before the tournament, the professor deploys the crawler of every group from its
-   GitHub repository. The crawlers keep running for the whole tournament.
+   GitHub repository. Each match starts the crawlers of its two groups, each one alone on
+   its own player VM.
 2. For each match, the professor clicks "Start race".
 3. Both crawlers receive the same start and target articles at the same moment.
 4. The dashboard shows the progress of both crawlers.

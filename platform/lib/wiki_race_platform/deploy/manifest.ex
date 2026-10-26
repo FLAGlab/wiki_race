@@ -12,11 +12,16 @@ defmodule WikiRacePlatform.Deploy.Manifest do
   for the terminal-only `mix wiki_race.deploy`/`.start`/`.stop` tasks, and
   how `ScheduleLive` resolves which connected node belongs to which roster
   name when starting a race, without a manual per-race node picker.
+
+  `slug` (optional) names the folder of the group's release on a player VM
+  (see `Deploy.Server.release_dir/1`). Every group of
+  `deploy/final/groups.txt` has one.
   """
 
   @manifest_file "groups.exs"
 
   @type group :: %{
+          optional(:slug) => String.t(),
           name: String.t(),
           app: atom(),
           repo: String.t(),

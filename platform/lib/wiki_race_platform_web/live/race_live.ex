@@ -35,7 +35,8 @@ defmodule WikiRacePlatformWeb.RaceLive do
        snapshot: Race.snapshot(),
        progress: Tournament.progress(),
        next_fixture: Tournament.next_fixture(),
-       error: nil
+       error: nil,
+       starting: false
      )
      |> assign_clock()}
   end
@@ -59,19 +60,46 @@ defmodule WikiRacePlatformWeb.RaceLive do
   def handle_info(:tick, socket), do: {:noreply, assign_clock(socket)}
 
   @impl true
+  def handle_event("start_next", _params, %{assigns: %{starting: true}} = socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("start_next", _params, socket) do
     case socket.assigns.next_fixture do
       nil ->
         {:noreply, socket}
 
       fixture ->
-        with {:ok, node_mapping} <- NodeResolution.resolve(fixture),
-             {:ok, snapshot} <- Tournament.start_next!(node_mapping) do
-          {:noreply, socket |> assign(snapshot: snapshot, error: nil) |> assign_clock()}
-        else
-          {:error, message} -> {:noreply, assign(socket, error: message)}
-        end
+        {:noreply,
+         socket
+         |> assign(error: nil, starting: true)
+         |> start_async(:start_next, fn -> start_match(fixture) end)}
     end
+  end
+
+  # On the university VMs this first starts both crawlers on the player
+  # VMs, which takes a few seconds (see `NodeResolution`).
+  defp start_match(fixture) do
+    with {:ok, node_mapping} <- NodeResolution.resolve(fixture) do
+      Tournament.start_next!(node_mapping)
+    end
+  end
+
+  @impl true
+  def handle_async(:start_next, {:ok, {:ok, snapshot}}, socket) do
+    {:noreply, socket |> assign(snapshot: snapshot, starting: false) |> assign_clock()}
+  end
+
+  def handle_async(:start_next, {:ok, {:error, message}}, socket) do
+    {:noreply, assign(socket, starting: false, error: message)}
+  end
+
+  def handle_async(:start_next, {:exit, reason}, socket) do
+    {:noreply,
+     assign(socket,
+       starting: false,
+       error: "starting the match failed: #{inspect(reason)}"
+     )}
   end
 
   @impl true
@@ -87,6 +115,7 @@ defmodule WikiRacePlatformWeb.RaceLive do
 
   attr :next_fixture, :any, required: true
   attr :error, :any, required: true
+  attr :starting, :boolean, required: true
   def next_match_control(assigns)
 
   defp fixture_summary({:bye, name}), do: "#{name}, solo time trial"

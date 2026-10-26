@@ -48,98 +48,97 @@
 # build/ship anything for this fixture, since nothing here ever calls
 # `mix wiki_race.deploy`.
 #
-# The two finalists come from `deploy/final/final.env` and only exist when
-# `WIKI_RACE_FINAL=true` (set by `deploy/final/wikirace`). Without it the
-# manifest stays the local one, so `check_groups/0` and its test never
-# see checkouts that only exist on the platform VM. Finalist N runs on
-# player VM N, under the node name `finalistN@<PLAYERN_IP>`.
+# On the university VMs (`WIKI_RACE_VMS=true`, set by `deploy/final/wikirace`)
+# the manifest is only the groups of `deploy/final/groups.txt`, cloned by
+# `mix wiki_race.fetch` (see `WikiRacePlatform.Deploy.GroupsFile`). They have
+# no `host`/`node`: each match starts its two groups on the player VMs and
+# picks their nodes then (see `WikiRacePlatform.Deploy.Match`). `slug` names
+# the release folder of the group on the player VMs. Without the variable
+# the manifest stays the local one below, so `check_groups/0` and its test
+# never see checkouts that only exist on the platform VM.
 
-finalist = fn n ->
-  ip = System.fetch_env!("PLAYER#{n}_IP")
-
-  %{
-    name: System.fetch_env!("FINALIST#{n}_NAME"),
-    app: String.to_atom(System.get_env("FINALIST#{n}_APP", "player")),
-    repo: System.fetch_env!("FINALIST#{n}_REPO"),
-    tag: System.fetch_env!("FINALIST#{n}_TAG"),
-    sha: "see `git -C <path> rev-parse HEAD`",
-    path: Path.expand("../deploy/final/finalists/#{n}", File.cwd!()),
-    module: nil,
-    host: ip,
-    node: :"finalist#{n}@#{ip}"
-  }
+if System.get_env("WIKI_RACE_VMS") == "true" do
+  for group <- WikiRacePlatform.Deploy.GroupsFile.read!() do
+    %{
+      name: group.name,
+      slug: group.slug,
+      app: :player,
+      repo: group.repo,
+      tag: group.tag,
+      sha: "see `git -C #{group.checkout} rev-parse HEAD`",
+      path: Path.expand(group.dir, group.checkout),
+      module: nil,
+      host: nil,
+      node: nil
+    }
+  end
+else
+  [
+    %{
+      name: "Local fixture",
+      app: :player,
+      repo: "local, player/ skeleton, not a real clone",
+      tag: "n/a",
+      sha: "n/a",
+      path: Path.expand("../player", File.cwd!()),
+      module: nil,
+      host: nil,
+      node: nil
+    },
+    %{
+      name: "player1",
+      app: :player,
+      repo: "local, player/ skeleton, not a real clone",
+      tag: "n/a",
+      sha: "n/a",
+      path: Path.expand("../player", File.cwd!()),
+      module: nil,
+      host: nil,
+      node: :player1@player1
+    },
+    %{
+      name: "player2",
+      app: :player,
+      repo: "local, player/ skeleton, not a real clone",
+      tag: "n/a",
+      sha: "n/a",
+      path: Path.expand("../player", File.cwd!()),
+      module: nil,
+      host: nil,
+      node: :player2@player2
+    },
+    %{
+      name: "Mutex Maniacs",
+      app: :player,
+      repo: "local test fixture, not a real clone",
+      tag: "n/a",
+      sha: "n/a",
+      path: Path.expand("../player", File.cwd!()),
+      module: nil,
+      host: nil,
+      node: :mutex@platform
+    },
+    %{
+      name: "Deadlock Debutantes",
+      app: :player,
+      repo: "local test fixture, not a real clone",
+      tag: "n/a",
+      sha: "n/a",
+      path: Path.expand("../player", File.cwd!()),
+      module: nil,
+      host: nil,
+      node: :deadlock@platform
+    },
+    %{
+      name: "Race Condition",
+      app: :player,
+      repo: "local test fixture, not a real clone",
+      tag: "n/a",
+      sha: "n/a",
+      path: Path.expand("../player", File.cwd!()),
+      module: nil,
+      host: nil,
+      node: :racecond@platform
+    }
+  ]
 end
-
-finalists =
-  if System.get_env("WIKI_RACE_FINAL") == "true",
-    do: [finalist.(1), finalist.(2)],
-    else: []
-
-[
-  %{
-    name: "Local fixture",
-    app: :player,
-    repo: "local, player/ skeleton, not a real clone",
-    tag: "n/a",
-    sha: "n/a",
-    path: Path.expand("../player", File.cwd!()),
-    module: nil,
-    host: nil,
-    node: nil
-  },
-  %{
-    name: "player1",
-    app: :player,
-    repo: "local, player/ skeleton, not a real clone",
-    tag: "n/a",
-    sha: "n/a",
-    path: Path.expand("../player", File.cwd!()),
-    module: nil,
-    host: nil,
-    node: :"player1@player1"
-  },
-  %{
-    name: "player2",
-    app: :player,
-    repo: "local, player/ skeleton, not a real clone",
-    tag: "n/a",
-    sha: "n/a",
-    path: Path.expand("../player", File.cwd!()),
-    module: nil,
-    host: nil,
-    node: :"player2@player2"
-  },
-  %{
-    name: "Mutex Maniacs",
-    app: :player,
-    repo: "local test fixture, not a real clone",
-    tag: "n/a",
-    sha: "n/a",
-    path: Path.expand("../player", File.cwd!()),
-    module: nil,
-    host: nil,
-    node: :"mutex@platform"
-  },
-  %{
-    name: "Deadlock Debutantes",
-    app: :player,
-    repo: "local test fixture, not a real clone",
-    tag: "n/a",
-    sha: "n/a",
-    path: Path.expand("../player", File.cwd!()),
-    module: nil,
-    host: nil,
-    node: :"deadlock@platform"
-  },
-  %{
-    name: "Race Condition",
-    app: :player,
-    repo: "local test fixture, not a real clone",
-    tag: "n/a",
-    sha: "n/a",
-    path: Path.expand("../player", File.cwd!()),
-    module: nil,
-    host: nil,
-    node: :"racecond@platform"
-  }
-] ++ finalists

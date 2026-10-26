@@ -9,7 +9,9 @@ defmodule WikiRacePlatformWeb.AdminLive do
   Deployment is terminal-only (`mix wiki_race.deploy`/`.start`/`.stop`). A
   node must already be connected under the name from its group's
   `priv/groups.exs` entry, so starting a match here never needs a manual
-  node picker.
+  node picker. On the university VMs, starting a match also starts the two
+  crawlers on the player VMs first (see `WikiRacePlatformWeb.NodeResolution`),
+  so it runs in `start_async/3`.
   """
 
   use WikiRacePlatformWeb, :live_view
@@ -30,7 +32,7 @@ defmodule WikiRacePlatformWeb.AdminLive do
 
     {:ok,
      socket
-     |> assign(snapshot: Race.snapshot(), error: nil)
+     |> assign(snapshot: Race.snapshot(), error: nil, starting: false)
      |> assign(tournament_assigns())}
   end
 
@@ -69,18 +71,20 @@ defmodule WikiRacePlatformWeb.AdminLive do
      )}
   end
 
+  def handle_event("start_next", _params, %{assigns: %{starting: true}} = socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("start_next", _params, socket) do
     case Tournament.next_fixture() do
       nil ->
         {:noreply, assign(socket, error: "no fixture is queued")}
 
       fixture ->
-        with {:ok, node_mapping} <- NodeResolution.resolve(fixture),
-             {:ok, _snapshot} <- Tournament.start_next!(node_mapping) do
-          {:noreply, socket |> assign(error: nil) |> push_navigate(to: ~p"/")}
-        else
-          {:error, message} -> {:noreply, assign(socket, error: message)}
-        end
+        {:noreply,
+         socket
+         |> assign(error: nil, starting: true)
+         |> start_async(:start_next, fn -> start_match(fixture) end)}
     end
   end
 
@@ -99,6 +103,29 @@ defmodule WikiRacePlatformWeb.AdminLive do
   end
 
   @impl true
+  def handle_async(:start_next, {:ok, {:ok, _snapshot}}, socket) do
+    {:noreply, socket |> assign(starting: false) |> push_navigate(to: ~p"/")}
+  end
+
+  def handle_async(:start_next, {:ok, {:error, message}}, socket) do
+    {:noreply, assign(socket, starting: false, error: message)}
+  end
+
+  def handle_async(:start_next, {:exit, reason}, socket) do
+    {:noreply,
+     assign(socket,
+       starting: false,
+       error: "starting the match failed: #{inspect(reason)}"
+     )}
+  end
+
+  defp start_match(fixture) do
+    with {:ok, node_mapping} <- NodeResolution.resolve(fixture) do
+      Tournament.start_next!(node_mapping)
+    end
+  end
+
+  @impl true
   def render(assigns)
 
   attr :snapshot, :map, required: true
@@ -110,6 +137,7 @@ defmodule WikiRacePlatformWeb.AdminLive do
   attr :progress, :map, required: true
   attr :next_fixture, :any, required: true
   attr :history, :list, required: true
+  attr :starting, :boolean, required: true
   def next_match(assigns)
 
   def danger_zone(assigns)
@@ -123,8 +151,9 @@ defmodule WikiRacePlatformWeb.AdminLive do
   defp note_suffix(%{note: ""}), do: ""
   defp note_suffix(%{note: note}), do: ", #{note}"
 
-  defp start_label([]), do: "▶ Start race"
-  defp start_label(_history), do: "⏭ Advance to next match"
+  defp start_label(true, _history), do: "Starting the crawlers…"
+  defp start_label(false, []), do: "▶ Start race"
+  defp start_label(false, _history), do: "⏭ Advance to next match"
 
   defp fixture_summary({:bye, name}), do: "#{name}, solo time trial"
   defp fixture_summary({a, b}), do: "#{a} vs #{b}"

@@ -51,8 +51,8 @@ defmodule WikiRacePlatformWeb.AdminLiveTest do
         :ok
 
       _fixture ->
-        html = render_click(live, "start_next", %{})
-        assert html =~ "no node configured for"
+        render_click(live, "start_next", %{})
+        assert render_async(live) =~ "no node configured for"
     end
   end
 end

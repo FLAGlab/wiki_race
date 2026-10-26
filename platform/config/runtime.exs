@@ -74,6 +74,21 @@ if config_env() != :test do
     data_dir: System.get_env("WIKI_RACE_DATA_DIR", "priv/data")
 end
 
+# The university VMs, started by `deploy/final/wikirace` (see DEPLOY.md).
+# The roster is every group of `deploy/final/groups.txt`, raced in the
+# tournament of config.exs. Every group's release is unpacked on both player
+# VMs, and each match starts its crawlers there (WikiRacePlatform.Deploy.Match).
+# The VMs have no Docker. All four run the same Ubuntu, so the platform VM
+# builds the releases with its own Erlang and Elixir.
+if config_env() == :dev and System.get_env("WIKI_RACE_VMS") == "true" do
+  config :wiki_race_platform, :tournament,
+    roster: Enum.map(WikiRacePlatform.Deploy.GroupsFile.read!(), & &1.name)
+
+  config :wiki_race_platform, :deploy,
+    builder: :native,
+    player_hosts: [System.fetch_env!("PLAYER1_IP"), System.fetch_env!("PLAYER2_IP")]
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :wiki_race_platform, WikiRacePlatformWeb.Endpoint,

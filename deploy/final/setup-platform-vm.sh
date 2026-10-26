@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Sets up the platform VM: Erlang and Elixir in /opt/wikirace (they run the
-# platform and build the releases of the finalists, no Docker), the SSH key
+# platform and build the releases of the groups, no Docker), the SSH key
 # that logs in to the player VMs, and the platform's dependencies and assets.
 #
 #   sudo deploy/final/setup-platform-vm.sh
