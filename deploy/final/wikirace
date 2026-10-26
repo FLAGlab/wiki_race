@@ -2,7 +2,7 @@
 # Runs the platform and the deploy commands on the platform VM, with the
 # settings of final.env. Run it as your normal user, never with sudo.
 #
-#   wikirace server            the platform, in the foreground (run it in tmux)
+#   wikirace server            the platform on PLATFORM_PORT, in the foreground (run it in tmux)
 #   wikirace fetch             clones both finalists at their tags
 #   wikirace check             checks Kiwix, the manifest, and SSH to both player VMs
 #   wikirace deploy 1|2|all    builds a release and copies it to its player VM
@@ -22,7 +22,7 @@ export PATH="$ELIXIR_DIR/bin:$OTP_DIR/bin:$PATH"
 export WIKI_RACE_FINAL=true
 export KIWIX_BASE_URL=http://kiwix1:8080
 export KIWIX_BOOK
-export PORT=4000
+export PORT="${PLATFORM_PORT:-4000}"
 PLATFORM_NODE="platform@$PLATFORM_IP"
 
 cd "$REPO_ROOT/platform"
