@@ -114,7 +114,7 @@ simulation of this setup.
 
    ```
    deploy/final/wikirace fetch          # clones both finalists at their tags
-   deploy/final/wikirace server         # in tmux: the platform, on port 4000
+   deploy/final/wikirace server         # in tmux: the platform, on PLATFORM_PORT
    deploy/final/wikirace check          # in another terminal
    deploy/final/wikirace deploy all
    deploy/final/wikirace start all
@@ -124,7 +124,11 @@ simulation of this setup.
    then allows outgoing traffic only to Kiwix and to the platform, like the internal
    networks of `docker-compose.yml`. A crawler cannot reach the internet or the other
    player VM. `wikirace check` shows `internet from player: blocked`.
-7. Open `http://<PLATFORM_IP>:4000/admin` and start the race.
+7. Open `http://<PLATFORM_IP>:<PLATFORM_PORT>/admin` and start the race. `PLATFORM_PORT` in
+   `final.env` defaults to 4000. The university network may block it between the classroom
+   and the VMs, so use a port it lets through, such as 8080 (`nc -zv <PLATFORM_IP> <port>`
+   from a classroom machine answers `Connection refused`, not `timed out`, for an open port
+   with nothing listening).
 
 The name `kiwix1` points at the Wikipedia VM on the platform VM and on the player VMs, so
 the crawlers get the same URLs as in the local setup. The platform runs with
